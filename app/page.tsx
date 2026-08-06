@@ -7,6 +7,8 @@ import { BEHAVIORAL } from "@/lib/behavioral";
 export const revalidate = 300;
 
 export default async function Home() {
+  const operators = await getOperators();
+
   if (!SITE.sheetCsvUrl) {
     return (
       <main className="container">
@@ -21,7 +23,6 @@ export default async function Home() {
     );
   }
 
-  const operators = await getOperators();
   const scored = operators
     .map((op) => ({ op, bacs: computeBacs(op) }))
     .sort((a, b) => b.bacs.score - a.bacs.score);
@@ -37,26 +38,32 @@ export default async function Home() {
         </p>
       </header>
 
-      <section className="grid">
-        {scored.map(({ op, bacs }) => (
-          <Link key={op.id} href={`/operators/${op.id}`} className="card">
-            <div className="cardTop">
-              <span className="badge" data-status={op.status}>{op.status}</span>
-              <span className="score">{bacs.score.toFixed(1)}</span>
-            </div>
-            <h2>{op.name}</h2>
-            <p className="trade">{op.trade} · {op.location}</p>
-            <p className="machines">{op.machines.join(" · ") || "Machines: —"}</p>
-            <p className="terrains">{op.terrains.join(" · ") || "Terrains: —"}</p>
-            <div className="evidenceRow">
-              <span>{BEHAVIORAL.evidenceLabel}: {bacs.evidenceDensity}%</span>
-              <div className="bar">
-                <div className="barFill" style={{ width: `${bacs.evidenceDensity}%` }} />
+      {scored.length === 0 ? (
+        <div className="notice">
+          <p>No operators found yet. Check your sheet data and try again.</p>
+        </div>
+      ) : (
+        <section className="grid">
+          {scored.map(({ op, bacs }) => (
+            <Link key={op.id} href={`/operators/${op.id}`} className="card">
+              <div className="cardTop">
+                <span className="badge" data-status={op.status}>{op.status}</span>
+                <span className="score">{bacs.score.toFixed(1)}</span>
               </div>
-            </div>
-          </Link>
-        ))}
-      </section>
+              <h2>{op.name}</h2>
+              <p className="trade">{op.trade} · {op.location}</p>
+              <p className="machines">{op.machines.join(" · ") || "Machines: —"}</p>
+              <p className="terrains">{op.terrains.join(" · ") || "Terrains: —"}</p>
+              <div className="evidenceRow">
+                <span>{BEHAVIORAL.evidenceLabel}: {bacs.evidenceDensity}%</span>
+                <div className="bar">
+                  <div className="barFill" style={{ width: `${bacs.evidenceDensity}%` }} />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
     </main>
   );
 }
