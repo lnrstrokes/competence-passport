@@ -9,6 +9,10 @@ interface MatchInput {
   jobDescription?: string;
 }
 
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export async function POST(request: Request) {
   let body: MatchInput;
   try {
@@ -30,9 +34,12 @@ export async function POST(request: Request) {
   const knownLocations = [...new Set(operators.map((o) => o.location.toLowerCase().trim()))].filter(Boolean);
   const textLower = jobDescription.toLowerCase();
   const requestedLocations = knownLocations.filter((l) => textLower.includes(l));
-  const locationMiss =
-    requestedLocations.length > 0 &&
-    !operators.some((o) => requestedLocations.includes(o.location.toLowerCase()));
+  const requestedLocation = requestedLocations[0] ?? null;
+
+  const inLocation = requestedLocation
+    ? operators.filter((o) => o.location.toLowerCase() === requestedLocation)
+    : [];
+  const tradesInLocation = [...new Set(inLocation.map((o) => o.trade))];
 
   const shortlist = operators
     .map((op) => {
@@ -44,17 +51,46 @@ export async function POST(request: Request) {
     .sort((a, b) => b.combined - a.combined)
     .slice(0, 6);
 
-  // Only operators sharing at least one real skill term (machine, terrain, or
-  // trade word) with the job description are ever recommended.
   const pool = shortlist.filter((s) => s.fit.matchScore > 0);
+  const skillMatchedInLocation = inLocation.some((o) => {
+    const f = scoreJobFit(o, jobDescription);
+    return f.matchScore > 0;
+  });
+  const skillMatchedElsewhere = pool.some(
+    (s) => !requestedLocation || s.op.location.toLowerCase() !== requestedLocation,
+  );
+
+  // Deterministic query diagnosis — works even when AI is unavailable
+  let advice: string;
+  if (!requestedLocation) {
+    advice =
+      "No location was specified — matches are ranked nationally. Add a city or state to narrow results.";
+  } else if (inLocation.length === 0) {
+    advice = `No registered operators in ${capitalize(requestedLocation)} at all. Matching skills exist elsewhere — consider relocation terms or the competence-test option.`;
+  } else if (!skillMatchedInLocation && skillMatchedElsewhere) {
+    advice = `Operators exist in ${capitalize(requestedLocation)} (${tradesInLocation.join(", ") || "various trades"}), but none match the requested skill there. The best skill match is located elsewhere.`;
+  } else if (skillMatchedInLocation) {
+    advice = `Matching operators found in ${capitalize(requestedLocation)}. Review the top matches below.`;
+  } else {
+    advice = "No operator matches the requested skill anywhere yet. Try different terms or invite operators to join.";
+  }
+
+  const diagnosis = {
+    requestedLocation,
+    operatorsInLocation: inLocation.length,
+    tradesInLocation,
+    skillMatchedInLocation,
+    skillMatchedElsewhere,
+    advice,
+  };
 
   if (pool.length === 0) {
     return Response.json({
       matches: [],
       noExactMatch: true,
       matchedTerms: [],
-      locationMiss,
-      requestedLocations,
+      diagnosis,
+      llmOk: false,
       message:
         "No operator with that skill — or anything closely related — is registered yet. Try different terms, or invite operators to join.",
     });
@@ -63,9 +99,7 @@ export async function POST(request: Request) {
   const rankedPool = pool.slice(0, 6);
   const maxMatches = Math.min(3, rankedPool.length);
 
-  const matchedTerms = [
-    ...new Set(rankedPool.flatMap((s) => [...s.fit.matchedMachines, ...s.fit.matchedTerrains])),
-  ];
+  const matchedTerms = [...new Set(rankedPool.flatMap((s) => s.fit.matchedTerms))];
 
   const candidates = rankedPool.map(({ op, bacs, fit }) => ({
     id: op.id,
@@ -90,6 +124,7 @@ export async function POST(request: Request) {
     reason: string;
     aiFit: number;
   }> = [];
+  let llmOk = false;
 
   try {
     const { data } = await completeJson<{
@@ -101,12 +136,8 @@ export async function POST(request: Request) {
         `JOB DESCRIPTION:`,
         jobDescription,
         ``,
-        requestedLocations.length > 0
-          ? `REQUESTED LOCATION(S): ${requestedLocations.join(", ")}`
-          : `REQUESTED LOCATION(S): none detected`,
-        locationMiss
-          ? "NOTE: No registered operator exists in the requested location. These are skill matches from other locations — present them as suggestions and say so."
-          : "",
+        requestedLocation ? `REQUESTED LOCATION: ${requestedLocation}` : "REQUESTED LOCATION: none detected",
+        advice,
         ``,
         `SHORTLIST:`,
         JSON.stringify(candidates, null, 2),
@@ -126,12 +157,21 @@ export async function POST(request: Request) {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .slice(0, 3);
+    llmOk = ranked.length > 0;
   } catch {
+    llmOk = false;
+  }
+
+  if (!llmOk) {
+    // Informative deterministic fallback — names the match and the trade-off
     ranked = rankedPool.slice(0, 3).map((s) => ({
       operator: s.op,
       bacs: s.bacs,
       fit: s.fit,
-      reason: "Top-ranked by verified BACS score and skill-fit match.",
+      reason:
+        s.fit.matchedTerms.length > 0
+          ? `Matched on: ${s.fit.matchedTerms.join(", ")}. BACS ${s.bacs.score.toFixed(1)} — ${requestedLocation && s.op.location.toLowerCase() !== requestedLocation ? `located in ${s.op.location} (not ${capitalize(requestedLocation)}).` : `located in ${s.op.location}.`}`
+          : `Verified ${s.op.trade.toLowerCase()} with BACS ${s.bacs.score.toFixed(1)}.`,
       aiFit: s.fit.matchScore,
     }));
   }
@@ -154,7 +194,7 @@ export async function POST(request: Request) {
     })),
     noExactMatch: false,
     matchedTerms,
-    locationMiss,
-    requestedLocations,
+    diagnosis,
+    llmOk,
   });
 }
