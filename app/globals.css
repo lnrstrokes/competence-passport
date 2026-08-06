@@ -1,4 +1,4 @@
-:root {
+@root {
   --bg: #070b14;
   --surface: rgba(255, 255, 255, 0.05);
   --surface-strong: rgba(255, 255, 255, 0.09);
@@ -216,3 +216,21 @@ li { margin-bottom: 4px; }
 .matchBody { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 .matchTop { display: flex; justify-content: space-between; align-items: center; }
 .reason { font-size: 0.85rem; }
+
+/* ── Top navigation ── */
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: rgba(7, 11, 20, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.topnav .logo { font-weight: 700; color: var(--accent); font-size: 0.95rem; letter-spacing: 0.02em; }
+.topnav nav { display: flex; gap: 18px; align-items: center; }
+.topnav nav a { color: var(--muted); font-size: 0.9rem; }
+.topnav nav a:hover { color: var(--text); }
