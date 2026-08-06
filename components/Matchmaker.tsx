@@ -20,17 +20,25 @@ interface MatchResult {
   fitScore: number;
 }
 
+interface MatchResponse {
+  matches: MatchResult[];
+  noExactMatch: boolean;
+  matchedTerms: string[];
+  locationMiss: boolean;
+  requestedLocations: string[];
+}
+
 export function Matchmaker() {
   const [job, setJob] = useState("");
   const [loading, setLoading] = useState(false);
-  const [matches, setMatches] = useState<MatchResult[] | null>(null);
+  const [result, setResult] = useState<MatchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function runMatch() {
     if (job.trim().length < 10) return;
     setLoading(true);
     setError(null);
-    setMatches(null);
+    setResult(null);
     try {
       const res = await fetch("/api/match", {
         method: "POST",
@@ -39,7 +47,7 @@ export function Matchmaker() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Match failed.");
-      setMatches(json.matches);
+      setResult(json);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -69,42 +77,65 @@ export function Matchmaker() {
 
       {error && <p className="error">{error}</p>}
 
-      {matches && (
-        <div className="matchList">
-          {matches.map((m, i) => (
-            <div key={m.operator.id} className="matchCard">
-              <div className="matchRank">{i + 1}</div>
-              <div className="matchBody">
-                <div className="matchTop">
-                  <Link href={`/operators/${m.operator.id}`} className="cardName">
-                    {m.operator.name}
-                  </Link>
-                  <span className="score">{m.bacs.score.toFixed(1)}</span>
-                </div>
-                <p className="trade">
-                  {m.operator.trade} · {m.operator.location} · {m.operator.seatHours.toLocaleString()} hrs
-                </p>
-                <p className="muted reason">{m.reason}</p>
-                <div className="cardActions">
-                  <a
-                    className="btn btnPrimary"
-                    href={BEHAVIORAL.cta.href(
-                      m.operator.whatsapp,
-                      BEHAVIORAL.cta.hireMessage(m.operator.name, m.operator.trade),
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {BEHAVIORAL.cta.hireLabel}
-                  </a>
-                  <Link href={`/operators/${m.operator.id}`} className="btn btnGhost">
-                    Profile →
-                  </Link>
+      {result && (
+        <>
+          {result.noExactMatch && (
+            <div className="callout">
+              <strong>No exact skill match.</strong> No registered operator currently holds the
+              exact skill in that job description.{" "}
+              {result.matchedTerms.length > 0 && (
+                <>Terms we matched: {result.matchedTerms.join(", ")}. </>
+              )}
+              Closest alternatives below — or invite operators to join via WhatsApp.
+            </div>
+          )}
+          {result.locationMiss && result.matches.length > 0 && (
+            <div className="callout">
+              <strong>No operator in {result.requestedLocations.join(", ")}.</strong>{" "}
+              Showing the best skill matches from other locations as suggestions — consider
+              relocation terms or the competence-test option.
+            </div>
+          )}
+          <h3 className="sectionTitle">
+            {result.noExactMatch ? "Closest matches" : "Top matches"}
+          </h3>
+          <div className="matchList">
+            {result.matches.map((m, i) => (
+              <div key={m.operator.id} className="matchCard">
+                <div className="matchRank">{i + 1}</div>
+                <div className="matchBody">
+                  <div className="matchTop">
+                    <Link href={`/operators/${m.operator.id}`} className="cardName">
+                      {m.operator.name}
+                    </Link>
+                    <span className="score">{m.bacs.score.toFixed(1)}</span>
+                  </div>
+                  <p className="trade">
+                    {m.operator.trade} · {m.operator.location} ·{" "}
+                    {m.operator.seatHours.toLocaleString()} hrs
+                  </p>
+                  <p className="muted reason">{m.reason}</p>
+                  <div className="cardActions">
+                    <a
+                      className="btn btnPrimary"
+                      href={BEHAVIORAL.cta.href(
+                        m.operator.whatsapp,
+                        BEHAVIORAL.cta.hireMessage(m.operator.name, m.operator.trade),
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {BEHAVIORAL.cta.hireLabel}
+                    </a>
+                    <Link href={`/operators/${m.operator.id}`} className="btn btnGhost">
+                      Profile →
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </section>
   );
