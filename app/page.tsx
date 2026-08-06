@@ -4,6 +4,7 @@ import { getOperators } from "@/lib/sheet";
 import { computeBacs } from "@/lib/bacs";
 import { BEHAVIORAL } from "@/lib/behavioral";
 import { initials } from "@/lib/format";
+import { Matchmaker } from "@/components/Matchmaker";
 
 export const revalidate = 300;
 
@@ -45,6 +46,8 @@ export default async function Home() {
           </a>
         </div>
       </header>
+
+      <Matchmaker />
 
       {scored.length === 0 ? (
         <div className="notice">
