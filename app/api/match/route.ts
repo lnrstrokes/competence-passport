@@ -36,7 +36,19 @@ export async function POST(request: Request) {
     .sort((a, b) => b.combined - a.combined)
     .slice(0, 6);
 
-  const candidates = shortlist.map(({ op, bacs, fit }) => ({
+  // Exact-skill gating: only candidates with at least one matched machine,
+  // terrain, or trade term qualify as a direct match.
+  const pool = shortlist.filter((s) => s.fit.matchScore > 0);
+  const noExactMatch = pool.length === 0;
+  const rankedPool = noExactMatch ? shortlist.slice(0, 3) : pool.slice(0, 6);
+
+  const matchedTerms = [
+    ...new Set(
+      rankedPool.flatMap((s) => [...s.fit.matchedMachines, ...s.fit.matchedTerrains]),
+    ),
+  ];
+
+  const candidates = rankedPool.map(({ op, bacs, fit }) => ({
     id: op.id,
     name: op.name,
     trade: op.trade,
@@ -52,14 +64,21 @@ export async function POST(request: Request) {
     matchedTerrains: fit.matchedTerrains,
   }));
 
-  let ranked: Array<{ operator: (typeof shortlist)[number]["op"]; bacs: (typeof shortlist)[number]["bacs"]; fit: (typeof shortlist)[number]["fit"]; reason: string; aiFit: number }> = [];
+  let ranked: Array<{
+    operator: (typeof rankedPool)[number]["op"];
+    bacs: (typeof rankedPool)[number]["bacs"];
+    fit: (typeof rankedPool)[number]["fit"];
+    reason: string;
+    aiFit: number;
+  }> = [];
 
   try {
     const { data } = await completeJson<{
       matches: Array<{ id: string; fit: number; reason: string }>;
     }>({
-      system:
-        "You are a senior recruitment analyst for heavy-equipment operators. Given a job description and a shortlist of verified operators (with BACS scores and evidence), pick the top 3 best-fit operators and explain why in plain recruiter language. Respond with valid JSON only.",
+      system: noExactMatch
+        ? "You are a senior recruitment analyst for heavy-equipment operators. No registered operator has the exact skill requested in the job description. Rank the closest alternatives, state clearly what skill is missing, and explain the trade-off in plain recruiter language. Respond with valid JSON only."
+        : "You are a senior recruitment analyst for heavy-equipment operators. Given a job description and a shortlist of verified operators (with BACS scores and evidence), pick the top 3 best-fit operators and explain why in plain recruiter language. Respond with valid JSON only.",
       user: [
         `JOB DESCRIPTION:`,
         jobDescription,
@@ -74,7 +93,7 @@ export async function POST(request: Request) {
 
     ranked = data.matches
       .map((m) => {
-        const entry = shortlist.find((s) => s.op.id === m.id);
+        const entry = rankedPool.find((s) => s.op.id === m.id);
         if (!entry) return null;
         return {
           operator: entry.op,
@@ -87,12 +106,13 @@ export async function POST(request: Request) {
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .slice(0, 3);
   } catch {
-    // AI unavailable → deterministic fallback so the demo never breaks
-    ranked = shortlist.slice(0, 3).map((s) => ({
+    ranked = rankedPool.slice(0, 3).map((s) => ({
       operator: s.op,
       bacs: s.bacs,
       fit: s.fit,
-      reason: "Top-ranked by verified BACS score and skill-fit match.",
+      reason: noExactMatch
+        ? "No exact skill match registered. Closest verified alternative by BACS score and skill overlap."
+        : "Top-ranked by verified BACS score and skill-fit match.",
       aiFit: s.fit.matchScore,
     }));
   }
@@ -113,5 +133,7 @@ export async function POST(request: Request) {
       reason: r.reason,
       fitScore: r.aiFit,
     })),
+    noExactMatch,
+    matchedTerms,
   });
 }
