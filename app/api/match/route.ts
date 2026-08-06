@@ -27,7 +27,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "No operators available yet." }, { status: 404 });
   }
 
-  // Location awareness (data-driven from the registered operators)
   const knownLocations = [...new Set(operators.map((o) => o.location.toLowerCase().trim()))].filter(Boolean);
   const textLower = jobDescription.toLowerCase();
   const requestedLocations = knownLocations.filter((l) => textLower.includes(l));
@@ -40,26 +39,32 @@ export async function POST(request: Request) {
       const bacs = computeBacs(op);
       const fit = scoreJobFit(op, jobDescription);
       const locationBonus = requestedLocations.includes(op.location.toLowerCase()) ? 12 : 0;
-      return {
-        op,
-        bacs,
-        fit,
-        combined: bacs.score * 0.6 + fit.matchScore * 0.4 + locationBonus,
-      };
+      return { op, bacs, fit, combined: bacs.score * 0.6 + fit.matchScore * 0.4 + locationBonus };
     })
     .sort((a, b) => b.combined - a.combined)
     .slice(0, 6);
 
-  // Exact-skill gate: only candidates with a genuine machine/terrain/trade match.
+  // Only operators sharing at least one real skill term (machine, terrain, or
+  // trade word) with the job description are ever recommended.
   const pool = shortlist.filter((s) => s.fit.matchScore > 0);
-  const noExactMatch = pool.length === 0;
-  const rankedPool = noExactMatch ? shortlist.slice(0, 3) : pool.slice(0, 6);
+
+  if (pool.length === 0) {
+    return Response.json({
+      matches: [],
+      noExactMatch: true,
+      matchedTerms: [],
+      locationMiss,
+      requestedLocations,
+      message:
+        "No operator with that skill — or anything closely related — is registered yet. Try different terms, or invite operators to join.",
+    });
+  }
+
+  const rankedPool = pool.slice(0, 6);
   const maxMatches = Math.min(3, rankedPool.length);
 
   const matchedTerms = [
-    ...new Set(
-      rankedPool.flatMap((s) => [...s.fit.matchedMachines, ...s.fit.matchedTerrains]),
-    ),
+    ...new Set(rankedPool.flatMap((s) => [...s.fit.matchedMachines, ...s.fit.matchedTerrains])),
   ];
 
   const candidates = rankedPool.map(({ op, bacs, fit }) => ({
@@ -99,7 +104,9 @@ export async function POST(request: Request) {
         requestedLocations.length > 0
           ? `REQUESTED LOCATION(S): ${requestedLocations.join(", ")}`
           : `REQUESTED LOCATION(S): none detected`,
-        locationMiss ? "NOTE: No registered operator exists in the requested location. These are skill matches from other locations — present them as suggestions and say so." : "",
+        locationMiss
+          ? "NOTE: No registered operator exists in the requested location. These are skill matches from other locations — present them as suggestions and say so."
+          : "",
         ``,
         `SHORTLIST:`,
         JSON.stringify(candidates, null, 2),
@@ -115,13 +122,7 @@ export async function POST(request: Request) {
       .map((m) => {
         const entry = rankedPool.find((s) => s.op.id === m.id);
         if (!entry) return null;
-        return {
-          operator: entry.op,
-          bacs: entry.bacs,
-          fit: entry.fit,
-          reason: m.reason,
-          aiFit: m.fit,
-        };
+        return { operator: entry.op, bacs: entry.bacs, fit: entry.fit, reason: m.reason, aiFit: m.fit };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .slice(0, 3);
@@ -130,9 +131,7 @@ export async function POST(request: Request) {
       operator: s.op,
       bacs: s.bacs,
       fit: s.fit,
-      reason: noExactMatch
-        ? "No exact skill match registered. Closest verified alternative by BACS score and skill overlap."
-        : "Top-ranked by verified BACS score and skill-fit match.",
+      reason: "Top-ranked by verified BACS score and skill-fit match.",
       aiFit: s.fit.matchScore,
     }));
   }
@@ -153,7 +152,7 @@ export async function POST(request: Request) {
       reason: r.reason,
       fitScore: r.aiFit,
     })),
-    noExactMatch,
+    noExactMatch: false,
     matchedTerms,
     locationMiss,
     requestedLocations,
