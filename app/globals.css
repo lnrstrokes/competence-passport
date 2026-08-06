@@ -234,3 +234,8 @@ li { margin-bottom: 4px; }
 .topnav nav { display: flex; gap: 18px; align-items: center; }
 .topnav nav a { color: var(--muted); font-size: 0.9rem; }
 .topnav nav a:hover { color: var(--text); }
+/* ── Skill categories ── */
+.categoryBar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; }
+.categoryBar .chip { text-decoration: none; }
+.categoryBar .chip:hover { border-color: var(--accent); color: var(--text); }
+.categoryHeader { padding: 8px 0 24px; }
