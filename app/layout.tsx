@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { SITE } from "@/config/site";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,7 +12,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <header className="topnav">
+          <Link href="/" className="logo">{SITE.name}</Link>
+          <nav>
+            <Link href="/">Home</Link>
+            <a href="/#matchmaker">Matchmaker</a>
+          </nav>
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
