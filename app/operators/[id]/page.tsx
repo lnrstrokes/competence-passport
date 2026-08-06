@@ -5,6 +5,7 @@ import { computeBacs } from "@/lib/bacs";
 import { BEHAVIORAL } from "@/lib/behavioral";
 import { initials, videoEmbedUrl } from "@/lib/format";
 import { CompetenceSummary } from "@/components/CompetenceSummary";
+import { ShareProfile } from "@/components/ShareProfile";
 
 export const revalidate = 300;
 
@@ -67,11 +68,26 @@ export default async function OperatorPage({ params }: { params: Promise<{ id: s
         )}
 
         <div>
-          <h2 className="sectionTitle">Machines, terrain & credentials</h2>
+          <h2 className="sectionTitle">Machines I can confidently operate</h2>
           <div className="chips">
             {op.machines.map((m) => <span key={m} className="chip">⚙ {m}</span>)}
+            {op.machines.length === 0 && <span className="muted">No machines listed yet.</span>}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="sectionTitle">Terrains I&apos;m good at / have worked on</h2>
+          <div className="chips">
             {op.terrains.map((t) => <span key={t} className="chip">⛰ {t}</span>)}
+            {op.terrains.length === 0 && <span className="muted">No terrains listed yet.</span>}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="sectionTitle">Certifications & credentials</h2>
+          <div className="chips">
             {op.certifications.map((c) => <span key={c} className="chip">✓ {c}</span>)}
+            {op.certifications.length === 0 && <span className="muted">None listed.</span>}
           </div>
         </div>
 
@@ -97,6 +113,7 @@ export default async function OperatorPage({ params }: { params: Promise<{ id: s
           <a className="btn" href={testHref} target="_blank" rel="noopener noreferrer">
             {BEHAVIORAL.cta.testLabel}
           </a>
+          <ShareProfile path={`/operators/${op.id}`} name={op.name} />
         </div>
         <p className="muted" style={{ fontSize: "0.82rem" }}>
           Requesting a competence test: the employer covers equipment rental and associated
