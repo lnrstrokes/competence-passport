@@ -27,20 +27,34 @@ export async function POST(request: Request) {
     return Response.json({ error: "No operators available yet." }, { status: 404 });
   }
 
+  // Location awareness (data-driven from the registered operators)
+  const knownLocations = [...new Set(operators.map((o) => o.location.toLowerCase().trim()))].filter(Boolean);
+  const textLower = jobDescription.toLowerCase();
+  const requestedLocations = knownLocations.filter((l) => textLower.includes(l));
+  const locationMiss =
+    requestedLocations.length > 0 &&
+    !operators.some((o) => requestedLocations.includes(o.location.toLowerCase()));
+
   const shortlist = operators
     .map((op) => {
       const bacs = computeBacs(op);
       const fit = scoreJobFit(op, jobDescription);
-      return { op, bacs, fit, combined: bacs.score * 0.6 + fit.matchScore * 0.4 };
+      const locationBonus = requestedLocations.includes(op.location.toLowerCase()) ? 12 : 0;
+      return {
+        op,
+        bacs,
+        fit,
+        combined: bacs.score * 0.6 + fit.matchScore * 0.4 + locationBonus,
+      };
     })
     .sort((a, b) => b.combined - a.combined)
     .slice(0, 6);
 
-  // Exact-skill gating: only candidates with at least one matched machine,
-  // terrain, or trade term qualify as a direct match.
+  // Exact-skill gate: only candidates with a genuine machine/terrain/trade match.
   const pool = shortlist.filter((s) => s.fit.matchScore > 0);
   const noExactMatch = pool.length === 0;
   const rankedPool = noExactMatch ? shortlist.slice(0, 3) : pool.slice(0, 6);
+  const maxMatches = Math.min(3, rankedPool.length);
 
   const matchedTerms = [
     ...new Set(
@@ -76,18 +90,24 @@ export async function POST(request: Request) {
     const { data } = await completeJson<{
       matches: Array<{ id: string; fit: number; reason: string }>;
     }>({
-      system: noExactMatch
-        ? "You are a senior recruitment analyst for heavy-equipment operators. No registered operator has the exact skill requested in the job description. Rank the closest alternatives, state clearly what skill is missing, and explain the trade-off in plain recruiter language. Respond with valid JSON only."
-        : "You are a senior recruitment analyst for heavy-equipment operators. Given a job description and a shortlist of verified operators (with BACS scores and evidence), pick the top 3 best-fit operators and explain why in plain recruiter language. Respond with valid JSON only.",
+      system:
+        "You are a senior recruitment analyst for heavy-equipment operators. Given a job description and a shortlist of verified operators (with BACS scores and evidence), rank the best-fit operators and explain why in plain recruiter language. Never include an operator whose trade and machines share no terms with the job description. Respond with valid JSON only.",
       user: [
         `JOB DESCRIPTION:`,
         jobDescription,
         ``,
+        requestedLocations.length > 0
+          ? `REQUESTED LOCATION(S): ${requestedLocations.join(", ")}`
+          : `REQUESTED LOCATION(S): none detected`,
+        locationMiss ? "NOTE: No registered operator exists in the requested location. These are skill matches from other locations — present them as suggestions and say so." : "",
+        ``,
         `SHORTLIST:`,
         JSON.stringify(candidates, null, 2),
         ``,
-        `Return JSON: { "matches": [ { "id": "<operator id>", "fit": <0-100>, "reason": "<2 sentence why they fit>" } ] }. Pick exactly 3, ordered best first.`,
-      ].join("\n"),
+        `Return JSON: { "matches": [ { "id": "<operator id>", "fit": <0-100>, "reason": "<2 sentence why they fit>" } ] }. Pick up to ${maxMatches}, ordered best first.`,
+      ]
+        .filter((line) => line !== "")
+        .join("\n"),
       maxTokens: 1200,
     });
 
@@ -135,5 +155,7 @@ export async function POST(request: Request) {
     })),
     noExactMatch,
     matchedTerms,
+    locationMiss,
+    requestedLocations,
   });
 }
