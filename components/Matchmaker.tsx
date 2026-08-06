@@ -26,6 +26,7 @@ interface MatchResponse {
   matchedTerms: string[];
   locationMiss: boolean;
   requestedLocations: string[];
+  message?: string;
 }
 
 export function Matchmaker() {
@@ -55,8 +56,10 @@ export function Matchmaker() {
     }
   }
 
+  const joinHref = BEHAVIORAL.cta.href(BEHAVIORAL.ownerWhatsapp, BEHAVIORAL.cta.joinMessage());
+
   return (
-    <section className="matchmaker">
+    <section id="matchmaker" className="matchmaker">
       <h2 className="sectionTitle">Recruiter matchmaker</h2>
       <p className="muted">
         Paste a job description. AI ranks the top 3 verified operators and explains why they fit.
@@ -77,18 +80,18 @@ export function Matchmaker() {
 
       {error && <p className="error">{error}</p>}
 
-      {result && (
+      {result && result.noExactMatch && (
+        <div className="callout">
+          <strong>The exact skill isn&apos;t available.</strong> {result.message}{" "}
+          <a href={joinHref} target="_blank" rel="noopener noreferrer">
+            Invite operators to join
+          </a>{" "}
+          — or try different terms.
+        </div>
+      )}
+
+      {result && !result.noExactMatch && (
         <>
-          {result.noExactMatch && (
-            <div className="callout">
-              <strong>No exact skill match.</strong> No registered operator currently holds the
-              exact skill in that job description.{" "}
-              {result.matchedTerms.length > 0 && (
-                <>Terms we matched: {result.matchedTerms.join(", ")}. </>
-              )}
-              Closest alternatives below — or invite operators to join via WhatsApp.
-            </div>
-          )}
           {result.locationMiss && result.matches.length > 0 && (
             <div className="callout">
               <strong>No operator in {result.requestedLocations.join(", ")}.</strong>{" "}
@@ -96,9 +99,7 @@ export function Matchmaker() {
               relocation terms or the competence-test option.
             </div>
           )}
-          <h3 className="sectionTitle">
-            {result.noExactMatch ? "Closest matches" : "Top matches"}
-          </h3>
+          <h3 className="sectionTitle">Top matches</h3>
           <div className="matchList">
             {result.matches.map((m, i) => (
               <div key={m.operator.id} className="matchCard">
