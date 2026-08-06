@@ -24,8 +24,15 @@ interface MatchResponse {
   matches: MatchResult[];
   noExactMatch: boolean;
   matchedTerms: string[];
-  locationMiss: boolean;
-  requestedLocations: string[];
+  llmOk: boolean;
+  diagnosis: {
+    requestedLocation: string | null;
+    operatorsInLocation: number;
+    tradesInLocation: string[];
+    skillMatchedInLocation: boolean;
+    skillMatchedElsewhere: boolean;
+    advice: string;
+  };
   message?: string;
 }
 
@@ -90,15 +97,14 @@ export function Matchmaker() {
         </div>
       )}
 
+      {result && result.diagnosis && !result.noExactMatch && (
+        <div className="callout diagnosis">
+          <strong>Query analysis:</strong> {result.diagnosis.advice}
+        </div>
+      )}
+
       {result && !result.noExactMatch && (
         <>
-          {result.locationMiss && result.matches.length > 0 && (
-            <div className="callout">
-              <strong>No operator in {result.requestedLocations.join(", ")}.</strong>{" "}
-              Showing the best skill matches from other locations as suggestions — consider
-              relocation terms or the competence-test option.
-            </div>
-          )}
           <h3 className="sectionTitle">Top matches</h3>
           <div className="matchList">
             {result.matches.map((m, i) => (
@@ -136,6 +142,12 @@ export function Matchmaker() {
               </div>
             ))}
           </div>
+          {!result.llmOk && (
+            <p className="muted" style={{ fontSize: "0.78rem" }}>
+              Ranking shown is deterministic (AI service rate-limited or unavailable). Results are
+              still accurate — try again in a minute for AI explanations.
+            </p>
+          )}
         </>
       )}
     </section>
