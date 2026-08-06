@@ -4,13 +4,16 @@ import { parseOperatorRow, type Operator } from "@/lib/schema";
 export async function getOperators(): Promise<Operator[]> {
   if (!SITE.sheetCsvUrl) return [];
 
-  const res = await fetch(SITE.sheetCsvUrl, { next: { revalidate: 300 } });
-  if (!res.ok) throw new Error(`Failed to fetch sheet CSV: ${res.status}`);
-
-  const rows = parseCsv(await res.text());
-  return rows
-    .map(parseOperatorRow)
-    .filter((op): op is Operator => op !== null);
+  try {
+    const res = await fetch(SITE.sheetCsvUrl, { next: { revalidate: 300 } });
+    if (!res.ok) return [];
+    const rows = parseCsv(await res.text());
+    return rows
+      .map(parseOperatorRow)
+      .filter((op): op is Operator => op !== null);
+  } catch {
+    return [];
+  }
 }
 
 export function parseCsv(text: string): Record<string, string>[] {
