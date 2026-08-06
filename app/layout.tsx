@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" className="logo">{SITE.name}</Link>
           <nav>
             <Link href="/">Home</Link>
+            <Link href="/skills">Skills</Link>
             <a href="/#matchmaker">Matchmaker</a>
           </nav>
         </header>
